@@ -1,0 +1,80 @@
+networks:
+  acme:
+    external: true
+
+volumes:
+  kafka_data:
+
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: SSL://0.0.0.0:9095,CONTROLLER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: SSL://acme_kafka_kafka:9095
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SSL:SSL,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+      KAFKA_SSL_KEYSTORE_FILENAME: kafka.server.keystore.jks
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: keystore_creds
+      KAFKA_SSL_KEY_CREDENTIALS: key_creds
+      KAFKA_SSL_TRUSTSTORE_FILENAME: kafka.server.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: truststore_creds
+      # The apache/kafka image only sets KAFKA_SSL_TRUSTSTORE_LOCATION when
+      # CLIENT_AUTH is required/requested. With "none", the truststore is
+      # skipped, so Kafka's SSL self-test (SslFactory.configure) uses the JVM
+      # default trust store which doesn't know our self-signed CA → PKIX fail.
+      # Setting these explicitly forces the truststore to load regardless.
+      KAFKA_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.server.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_TRUSTSTORE_PASS}
+      KAFKA_SSL_CLIENT_AUTH: none
+      KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ''
+      KAFKA_INTER_BROKER_LISTENER_NAME: SSL
+      KAFKA_LISTENER_NAME_SSL_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ''
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+      - ./ssl:/etc/kafka/secrets
+    networks:
+      - acme
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9095 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 15s
+        max_attempts: 0
+        window: 120s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      KAFKA_CLUSTERS_0_NAME: acme
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: acme_kafka_kafka:9095
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SSL
+      KAFKA_CLUSTERS_0_SSL_TRUSTSTORELOCATION: /kafka_ssl/kafka.server.truststore.jks
+      KAFKA_CLUSTERS_0_SSL_TRUSTSTOREPASSWORD: ${KAFKA_CLIENT_TRUSTSTORE_PASS}
+    volumes:
+      - ./ssl:/kafka_ssl
+    ports:
+      - "8080:8080"
+    networks:
+      - acme
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
