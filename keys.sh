@@ -170,6 +170,11 @@ cp "$WORK/kafka.client.keystore.p12"   "$OUT_DIR/"
 cp "$WORK/client.certificate.pem"      "$OUT_DIR/"
 cp "$WORK/client.key.pem"              "$OUT_DIR/"
 
+# Replicate production layout: librdkafka clients (Karafka via karafka_base.rb)
+# expect kafka.client.keystore.jks. The file is actually PKCS12 — librdkafka
+# autodetects the format from the content, ignoring the .jks extension.
+cp "$WORK/kafka.client.keystore.p12"   "$OUT_DIR/kafka.client.keystore.jks"
+
 chmod 600 "$OUT_DIR/"*.jks "$OUT_DIR/"*.p12 "$OUT_DIR/"*.pem "$OUT_DIR/"*_creds
 
 # ── Resumo e variáveis de ambiente ───────────────────────────────────────────
